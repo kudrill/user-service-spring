@@ -13,11 +13,17 @@ import java.util.stream.Collectors;
 @Transactional
 public class UserServiceImpl implements UserService {
 
-    private final UserRepository repository;
 
-    public UserServiceImpl(UserRepository repository) {
+
+    private final UserRepository repository;
+    private final KafkaProducerService kafkaProducerService;
+
+    public UserServiceImpl(UserRepository repository, KafkaProducerService kafkaProducerService) {
         this.repository = repository;
+        this.kafkaProducerService = kafkaProducerService;
     }
+
+
 
     private UserDto toDto(User user) {
         return new UserDto(user.getId(), user.getName(), user.getEmail(), user.getAge(), user.getCreatedAt());
@@ -33,7 +39,9 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserDto create(UserDto dto) {
-        return toDto(repository.save(fromDto(dto)));
+        User user = repository.save(fromDto(dto));
+        kafkaProducerService.sendUserEvent("CREATE:" + user.getEmail());
+        return toDto(user);
     }
 
     @Override
@@ -60,6 +68,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public void delete(Long id) {
+        User user = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
         repository.deleteById(id);
+        kafkaProducerService.sendUserEvent("DELETE:" + user.getEmail());
     }
+
+
 }
